@@ -6,9 +6,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
-    body { margin: 24px; }
-    h1 { margin: 0 0 16px; }
-    .search { margin: 12px 0 20px; }
+    body { margin: 24px; position: relative; }
+    h1 { margin: 0 0 16px; display: inline-block; }
+    .logout-btn {
+      position: absolute;
+      top: 24px;
+      right: 24px;
+      padding: 8px 16px;
+      background-color: #ef4444;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .logout-btn:hover { background-color: #dc2626; }
+    .search { margin: 12px 0 20px; width: 100%; max-width: 400px; }
     .list { display: grid; gap: 8px; }
     .item {
       display: flex; justify-content: space-between; align-items: center;
@@ -22,6 +35,8 @@
 </head>
 <body>
   <h1>Список чатів</h1>
+  <button class="logout-btn" onclick="logout()">Вихід</button>
+
   <input id="q" class="search" type="search" placeholder="Пошук по назві…" />
   <div id="list" class="list"></div>
 
@@ -57,6 +72,16 @@
       .then(r => r.json())
       .then(data => { all = data; render(all); })
       .catch(err => { listEl.innerHTML = 'Помилка завантаження чатів'; console.error(err); });
+
+    async function logout() {
+      try {
+        await fetch('/logout'); // викликаємо наш FastAPI /logout
+        window.location.href = '/login'; // перенаправлення на логін
+      } catch (err) {
+        alert('Помилка при виході');
+        console.error(err);
+      }
+    }
   </script>
 </body>
 </html>

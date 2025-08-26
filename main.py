@@ -7,14 +7,14 @@ from pyrogram.errors import SessionPasswordNeeded
 from fastapi.responses import RedirectResponse
 
 
-API_ID = 28878649   # свій API_ID
-API_HASH = "38a07ed36a8c65efa63dc841441c54b5"  # свій API_HASH
+API_ID = 28878649
+API_HASH = "38a07ed36a8c65efa63dc841441c54b5"
 SESSION_NAME = "my_account"
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
-tg_client: Client | None = None   # замість глобального завжди свіжий
+tg_client: Client | None = None
 
 @app.on_event("startup")
 async def startup():
@@ -80,10 +80,10 @@ async def logout():
 
     if tg_client.is_connected:
         try:
-            await tg_client.log_out()  # автоматично stop()
+            await tg_client.log_out()
         except ConnectionError:
-            pass  # клієнт вже terminated
-    tg_client = None  # обов'язково очищаємо глобальний клієнт
+            pass
+    tg_client = None
     return RedirectResponse(url="/login", status_code=303)
 
 
@@ -98,21 +98,33 @@ async def get_chats():
     return chats
 
 @app.get("/messages/{chat_id}")
-async def get_messages(chat_id: int, limit: int = 50):
+async def get_messages(chat_id: int, limit: int = 50, before_id: int = None, after_id: int = None):
     messages = []
-    async for msg in tg_client.get_chat_history(chat_id, limit=limit):
-        messages.append({
-            "id": msg.id,
-            "text": msg.text,
-            "date": msg.date.isoformat() if msg.date else None,
+    if before_id:
+        async for msg in tg_client.get_chat_history(chat_id, limit=limit, offset_id=before_id):
+            messages.append(msg)
+    elif after_id:
+        async for msg in tg_client.get_chat_history(chat_id, limit=limit, offset_id=after_id):
+            if msg.id > after_id:
+                messages.append(msg)
+    else:
+        async for msg in tg_client.get_chat_history(chat_id, limit=limit):
+            messages.append(msg)
+
+    result = []
+    for m in sorted(messages, key=lambda x: x.id):
+        result.append({
+            "id": m.id,
+            "text": m.text,
+            "date": m.date.isoformat() if m.date else None,
             "from_user": {
-                "id": msg.from_user.id if msg.from_user else None,
-                "first_name": msg.from_user.first_name if msg.from_user else None,
-                "username": msg.from_user.username if msg.from_user else None,
-                "is_self": msg.from_user.is_self if msg.from_user else False,
+                "id": m.from_user.id if m.from_user else None,
+                "first_name": m.from_user.first_name if m.from_user else None,
+                "username": m.from_user.username if m.from_user else None,
+                "is_self": m.from_user.is_self if m.from_user else False,
             }
         })
-    return JSONResponse(messages)
+    return JSONResponse(result)
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
