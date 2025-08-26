@@ -5,6 +5,7 @@ from pyrogram import Client
 from pyrogram.enums import ChatType
 from pyrogram.errors import SessionPasswordNeeded
 from fastapi.responses import RedirectResponse
+import os
 
 
 API_ID = 28878649
@@ -43,6 +44,7 @@ async def login(
 ):
     global tg_client
 
+
     try:
         if password:
             await tg_client.check_password(password)
@@ -73,18 +75,11 @@ async def login(
 
 @app.get("/logout")
 async def logout():
-    global tg_client
-
-    if tg_client is None:
-        return {"status": "no client exists"}
-
-    if tg_client.is_connected:
-        try:
-            await tg_client.log_out()
-        except ConnectionError:
-            pass
-    tg_client = None
-    return RedirectResponse(url="/login", status_code=303)
+    if os.path.exists(SESSION_NAME+".session"):
+        os.remove(SESSION_NAME+".session")
+        return {"status": "session deleted, please login again"}
+    else:
+        return {"status": "no active session"}
 
 
 @app.get("/chats")
