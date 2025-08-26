@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>Чат {{ chat_id }}</title>
+<style>
+body { font-family: system-ui; margin: 0; padding: 0; }
+#messages-container {
+    height: 90vh;
+    overflow-y: scroll;
+    padding: 10px;
+    border: 1px solid #ccc;
+    display: flex;
+    flex-direction: column;
+}
+.message {
+    max-width: 60%;
+    padding: 8px 12px;
+    margin: 5px 0;
+    border-radius: 10px;
+    word-wrap: break-word;
+}
+.from-self {
+    background-color: #c8e6a5; /* трохи темніший зелений */
+    align-self: flex-end;
+}
+.from-other {
+    background-color: #d0d0d0; /* трохи темніший сірий */
+    align-self: flex-start;
+}
+    .date-divider {
+    text-align: center;
+    font-weight: bold;
+    color: #444;
+    background-color: #e0e0e0;
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    margin: 10px auto;
+    font-size: 0.9em;
+}
+</style>
+</head>
+<body>
+<h2>Чат {{ chat_id }}</h2>
+<div id="messages-container"></div>
+
+<script>
+let chatId = {{ chat_id }};
+let oldestId = null;
+let newestId = null;
+let limit = 50;
+let loadingOlder = false;
+let loadingNewer = false;
+
+const container = document.getElementById('messages-container');
+
+// ==== helper ====
+function sameDay(a, b) {
+  return a.getFullYear() === b.getFullYear() &&
+         a.getMonth() === b.getMonth() &&
+         a.getDate() === b.getDate();
+}
+
+function formatDateDivider(dateStr) {
+  const date = new Date(dateStr);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  const isSameDay = (d1, d2) =>
+    d1.getDate() === d2.getDate() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getFullYear() === d2.getFullYear();
+
+  if (isSameDay(date, today)) return "сьогодні";
+  if (isSameDay(date, yesterday)) return "вчора";
+
+  // В іншому випадку формат повна дата
+  return date.toLocaleDateString("uk-UA", {
+    day: "numeric",
+    month: "long",
+    year: "numeric"
+  });
+}
+
+// ==== фабрика елемента ====
+function createMessageFrag(msg, nextMsg = null) {
+  const msgDateObj = new Date(msg.date);
+  const msgDateStr = msgDateObj.toDateString();
+
+  const frag = document.createDocumentFragment();
+
+  // саме повідомлення
+  const div = document.createElement('div');
+  div.className = 'message ' + (msg.from_user.is_self ? 'from-self' : 'from-other');
+  div.textContent = `[${msg.date.split('T')[1].slice(0,8)}] ${msg.from_user.first_name || 'Anonymous'}: ${msg.text || ''}`;
+  div.dataset.id = msg.id;
+  div.dataset.day = msgDateStr;         // збережемо день для можливих меж пакетів
+  frag.appendChild(div);
+
+  // додаємо розділювач ТІЛЬКИ якщо є nextMsg і день змінюється
+  if (nextMsg) {
+    const nextDateObj = new Date(nextMsg.date);
+    const nextDateStr = nextMsg ? new Date(nextMsg.date).toDateString() : null;
+    if (!sameDay(msgDateObj, nextDateObj)) {
+      const dateDiv = document.createElement('div');
+      dateDiv.className = 'date-divider';
+      dateDiv.textContent = formatDateDivider(nextMsg.date);
+      frag.appendChild(dateDiv);
+    }
+  }
+
+  return frag;
+}
+
+// ===== початкове завантаження =====
+async function loadInitialMessages() {
+  const resp = await fetch(`/messages/${chatId}?limit=${limit}`);
+  const messages = await resp.json();
+  if (!messages.length) return;
+
+  messages.sort((a,b) => new Date(a.date) - new Date(b.date)); // старі вгорі
+
+  for (let i = 0; i < messages.length; i++) {
+    const next = (i < messages.length - 1) ? messages[i+1] : null;
+    container.appendChild(createMessageFrag(messages[i], next));
+  }
+
+  oldestId = messages[0].id;
+  newestId = messages[messages.length - 1].id;
+  container.scrollTop = container.scrollHeight;
+}
+
+// ===== підвантаження старіших (скрол вгору) =====
+async function loadOlderMessages() {
+  if (loadingOlder || !oldestId) return;
+  loadingOlder = true;
+
+  const resp = await fetch(`/messages/${chatId}?limit=${limit}&before_id=${oldestId}`);
+  const messages = await resp.json();
+  if (!messages.length) { loadingOlder = false; return; }
+
+  // приберемо дублікати
+  const existingIds = new Set(Array.from(container.children).map(n => n.dataset?.id).filter(Boolean));
+  const newMessages = messages.filter(m => !existingIds.has(String(m.id)));
+  if (!newMessages.length) { loadingOlder = false; return; }
+
+  // ВАЖЛИВО: тримаємо хронологічний порядок (старі→нові)
+  newMessages.sort((a,b) => new Date(a.date) - new Date(b.date));
+
+  const scrollBefore = container.scrollHeight;
+
+  // Збираємо фрагмент пакетом і вставляємо разом перед першим елементом
+  const batchFrag = document.createDocumentFragment();
+  for (let i = 0; i < newMessages.length; i++) {
+    const nextInBatch = (i < newMessages.length - 1) ? newMessages[i+1] : null;
+    batchFrag.appendChild(createMessageFrag(newMessages[i], nextInBatch));
+  }
+  container.insertBefore(batchFrag, container.firstChild);
+
+  oldestId = newMessages[0].id;
+  container.scrollTop = container.scrollHeight - scrollBefore;
+  loadingOlder = false;
+}
+
+// ===== новіші (полінг) =====
+async function loadNewerMessages() {
+  if (loadingNewer) return;
+  loadingNewer = true;
+
+  const resp = await fetch(`/messages/${chatId}?after_id=${newestId || 0}&limit=${limit}`);
+  const messages = await resp.json();
+  if (!messages.length) { loadingNewer = false; return; }
+
+  // приберемо дублікати
+  const existingIds = new Set(Array.from(container.children).map(n => n.dataset?.id).filter(Boolean));
+  const newMessages = messages.filter(m => !existingIds.has(String(m.id)));
+  if (!newMessages.length) { loadingNewer = false; return; }
+
+  newMessages.sort((a,b) => new Date(a.date) - new Date(b.date));
+
+  // додаємо в кінець, передаючи nextMsg всередині порції
+  for (let i = 0; i < newMessages.length; i++) {
+    const next = (i < newMessages.length - 1) ? newMessages[i+1] : null;
+    container.appendChild(createMessageFrag(newMessages[i], next));
+  }
+
+  newestId = newMessages[newMessages.length - 1].id;
+
+  // автоскрол вниз тільки якщо користувач майже внизу
+  if (container.scrollTop + container.clientHeight >= container.scrollHeight - 50) {
+    container.scrollTop = container.scrollHeight;
+  }
+
+  loadingNewer = false;
+}
+
+// тригери
+container.addEventListener('scroll', () => {
+  if (container.scrollTop < 50) loadOlderMessages();
+});
+
+loadInitialMessages();
+setInterval(loadNewerMessages, 5000);
+
+</script>
+
+</body>
+</html>

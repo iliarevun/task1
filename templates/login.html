@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Telegram Login</title>
+</head>
+<body>
+    <h1>Login to Telegram</h1>
+
+    {% if not sent and not need_password %}
+        <!-- Перша форма: вводимо телефон -->
+        <form method="post">
+            <label>Phone:</label>
+            <input type="text" name="phone" required />
+            <button type="submit">Send Code</button>
+        </form>
+    {% elif sent %}
+        <!-- Друга форма: вводимо код -->
+        <form method="post">
+            <input type="hidden" name="phone" value="{{ phone }}" />
+            <input type="hidden" name="phone_code_hash" value="{{ phone_code_hash }}" />
+            <label>Code:</label>
+            <input type="text" name="code" required />
+            <button type="submit">Login</button>
+        </form>
+    {% elif need_password %}
+        <!-- Третя форма: вводимо пароль 2FA -->
+        <form method="post">
+            <input type="hidden" name="phone" value="{{ phone }}" />
+            <label>Password:</label>
+            <input type="password" name="password" required />
+            <button type="submit">Confirm</button>
+        </form>
+    {% endif %}
+</body>
+</html>
