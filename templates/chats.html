@@ -68,7 +68,7 @@
       render(all.filter(c => (c.title || '').toLowerCase().includes(v)));
     });
 
-    fetch('/chats')
+    fetch(`/chats`)
       .then(r => r.json())
       .then(data => { all = data; render(all); })
       .catch(err => { listEl.innerHTML = 'Помилка завантаження чатів'; console.error(err); });

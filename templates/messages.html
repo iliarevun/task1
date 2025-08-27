@@ -91,18 +91,72 @@ function createMessageFrag(msg, nextMsg = null) {
 
   const frag = document.createDocumentFragment();
 
-  // саме повідомлення
   const div = document.createElement('div');
   div.className = 'message ' + (msg.from_user.is_self ? 'from-self' : 'from-other');
-  div.textContent = `[${msg.date.split('T')[1].slice(0,8)}] ${msg.from_user.first_name || 'Anonymous'}: ${msg.text || ''}`;
   div.dataset.id = msg.id;
-  div.dataset.day = msgDateStr;         // збережемо день для можливих меж пакетів
+  div.dataset.day = msgDateStr;
+
+  // ---- заголовок повідомлення (хто і коли)
+  let header = `[${msg.date.split('T')[1].slice(0,8)}] ${msg.from_user.first_name || 'Anonymous'}: `;
+
+  // ---- текст/підпис
+  let content = msg.text || "";
+
+  // ---- переслані повідомлення
+  if (msg.forwarded) {
+    let fwd = "↪️ Переслано ";
+    if (msg.forwarded.from_user) {
+      fwd += `від ${msg.forwarded.from_user.first_name || msg.forwarded.from_user.username || "користувач"}`;
+    } else if (msg.forwarded.from_chat) {
+      fwd += `з чату ${msg.forwarded.from_chat.title || "невідомо"}`;
+    }
+    content = fwd + (content ? ("\n" + content) : "");
+  }
+
+  // ---- медіа (фото/відео/документ)
+ if (msg.media) {
+            switch(msg.media.type) {
+                case "photo":
+                    content += `<br><img src="/file/${msg.media.file_id}" style="max-width:200px; border-radius:8px; margin-top:4px;">`;
+                    break;
+                case "video":
+                    content += `<br><video controls style="max-width:250px; border-radius:8px; margin-top:4px;">
+                                    <source src="/file/${msg.media.file_id}" type="video/mp4">
+                                </video>`;
+                    break;
+                case "document":
+                    content += `<br>📎 Документ: <a href="/file/${msg.media.file_id}" target="_blank">${msg.media.file_name}</a>`;
+                    break;
+                case "voice":
+                    content += `<br><audio controls style="margin-top:4px;">
+                                    <source src="/file/${msg.media.file_id}" type="audio/ogg">
+                                </audio>`;
+                    break;
+                case "video_note":
+                    content += `<br><video controls autoplay loop muted playsinline
+                        style="border-radius:50%; width:200px; height:200px; object-fit:cover; margin-top:4px;">
+                                <source src="/file/${msg.media.file_id}" type="video/mp4">
+                            </video>`;
+                    break;
+
+                case "sticker":
+                    content += `<br><img src="/file/${msg.media.file_id}" style="max-width:150px; margin-top:4px;">`;
+                    break;
+                case "animation": // GIF
+                    content += `<br><img src="/file/${msg.media.file_id}" style="max-width:200px; margin-top:4px;">`;
+                    break;
+                default:
+                    content += `<br>📎 Невідомий тип медіа`;
+            }
+        }
+
+
+  div.innerHTML = header + content;
   frag.appendChild(div);
 
-  // додаємо розділювач ТІЛЬКИ якщо є nextMsg і день змінюється
+  // ---- розділювач дати
   if (nextMsg) {
     const nextDateObj = new Date(nextMsg.date);
-    const nextDateStr = nextMsg ? new Date(nextMsg.date).toDateString() : null;
     if (!sameDay(msgDateObj, nextDateObj)) {
       const dateDiv = document.createElement('div');
       dateDiv.className = 'date-divider';
@@ -113,6 +167,7 @@ function createMessageFrag(msg, nextMsg = null) {
 
   return frag;
 }
+
 
 // ===== початкове завантаження =====
 async function loadInitialMessages() {
