@@ -1,0 +1,17 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+
+# Telegram
+pyrogram==2.0.106
+tgcrypto==1.2.5
+
+# MySQL
+mysql-connector-python==9.0.0
+sqlalchemy==2.0.34
+
+
+# Робота з .env файлами
+python-dotenv==1.0.1
+
+# Для асинхронних запитів
+httpx==0.27.2

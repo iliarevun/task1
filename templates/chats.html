@@ -53,6 +53,9 @@
         a.href = `/ui/chats/${encodeURIComponent(c.chat_id)}`;
         const title = c.title || '(без назви)';
         a.innerHTML = `
+         <div style="display:flex;align-items:center;">
+        ${photo}
+        <div>
           <div>
             <div>${title}</div>
             <div class="type">${c.type}</div>

@@ -6,9 +6,8 @@ from pyrogram.errors import SessionPasswordNeeded
 import os
 from TelegramClientManager import TelegramClientManager
 
-
-API_ID = 28878649
-API_HASH = "38a07ed36a8c65efa63dc841441c54b5"
+API_ID =
+API_HASH =
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -24,11 +23,11 @@ async def login_form(request: Request):
 
 @app.post("/login", response_class=HTMLResponse)
 async def login(
-    request: Request,
-    phone: str = Form(...),
-    code: str = Form(None),
-    phone_code_hash: str = Form(None),
-    password: str = Form(None)
+        request: Request,
+        phone: str = Form(...),
+        code: str = Form(None),
+        phone_code_hash: str = Form(None),
+        password: str = Form(None)
 ):
     session_name = phone  # 👈 унікальна сесія на юзера
     client = await tg_manager.get_client(session_name)
@@ -84,11 +83,8 @@ async def logout(request: Request):
         return {"status": "no active session"}
 
 
-
-
 @app.get("/chats")
 async def get_chats(request: Request):
-
     session_name = request.cookies.get("session_name")
     client = await tg_manager.get_client(session_name)
     chats = []
@@ -96,13 +92,22 @@ async def get_chats(request: Request):
         chat = dialog.chat
         title = chat.title if chat.type in [ChatType.GROUP, ChatType.SUPERGROUP, ChatType.CHANNEL] else \
             f"{chat.first_name or ''} {chat.last_name or ''}".strip() or "Private user"
-        chats.append({"chat_id": chat.id, "title": title, "type": chat.type.value})
+        # аватарка
+        photo_url = None
+        if chat.photo:
+            photo_url = await client.download_media(chat.photo.small_file_id)
+
+        chats.append({
+            "chat_id": chat.id,
+            "title": title,
+            "type": chat.type.value,
+            "photo": photo_url
+        })
     return chats
 
 
 @app.get("/messages/{chat_id}")
 async def get_messages(request: Request, chat_id: int, limit: int = 50, before_id: int = None, after_id: int = None):
-
     session_name = request.cookies.get("session_name")
     client = await tg_manager.get_client(session_name)
 
@@ -136,7 +141,8 @@ async def ui_chats(request: Request):
 @app.get("/ui/chats/{chat_id}", response_class=HTMLResponse)
 async def ui_chat_messages(chat_id: int, request: Request):
     session_name = request.cookies.get("session_name")
-    return templates.TemplateResponse("messages.html", {"request": request, "chat_id": chat_id, "session_name": session_name})
+    return templates.TemplateResponse("messages.html",
+                                      {"request": request, "chat_id": chat_id, "session_name": session_name})
 
 
 @app.get("/file/{file_id}")
@@ -150,7 +156,6 @@ async def download_file(file_id: str, request: Request):
         return FileResponse(file_path, filename=os.path.basename(file_path))
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
-
 
 
 def serialize_message(m):
@@ -248,4 +253,3 @@ def serialize_message(m):
         }
 
     return data
-
