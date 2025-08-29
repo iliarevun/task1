@@ -6,8 +6,8 @@ from pyrogram.errors import SessionPasswordNeeded
 import os
 from TelegramClientManager import TelegramClientManager
 
-API_ID =
-API_HASH =
+API_ID = 28878649
+API_HASH = "38a07ed36a8c65efa63dc841441c54b5"
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
