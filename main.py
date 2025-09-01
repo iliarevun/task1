@@ -1,13 +1,23 @@
-from fastapi import FastAPI, Request, Form, Query
+from fastapi import FastAPI, Request, Form, Query, Depends
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from pyrogram.enums import ChatType
 from pyrogram.errors import SessionPasswordNeeded
+
+from fastapi import Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+from database import get_db, Base, engine, SessionLocal
+from models import UserSession
 import os
+
 from TelegramClientManager import TelegramClientManager
 
-API_ID = 28878649
-API_HASH = "38a07ed36a8c65efa63dc841441c54b5"
+# Створюємо таблиці, якщо ще немає
+Base.metadata.create_all(bind=engine)
+
+API_ID =
+API_HASH =
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -16,51 +26,73 @@ templates = Jinja2Templates(directory="templates")
 tg_manager = TelegramClientManager(API_ID, API_HASH)
 
 
+@app.get("/user/{user_id}")
+async def get_user(user_id: int, db: Session = Depends(get_db)):
+    result = db.execute(select(UserSession).where(UserSession.id == user_id))
+    user_session = result.scalars().first()
+
+    if not user_session:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Для виводу в терміналі
+    print(user_session)
+
+    # Для повернення в API
+    return {
+        "id": user_session.id,
+        "phone": user_session.phone
+    }
+
+
 @app.get("/login", response_class=HTMLResponse)
 async def login_form(request: Request):
     return templates.TemplateResponse("login.html", {"request": request, "sent": False})
 
 
 @app.post("/login", response_class=HTMLResponse)
-async def login(
-        request: Request,
-        phone: str = Form(...),
-        code: str = Form(None),
-        phone_code_hash: str = Form(None),
-        password: str = Form(None)
-):
-    session_name = phone  # 👈 унікальна сесія на юзера
+async def login(request: Request, phone: str = Form(...),
+                code: str = Form(None), phone_code_hash: str = Form(None),
+                password: str = Form(None),
+                db: Session = Depends(get_db)):
+    session_name = phone
+    # 👈 унікальна сесія на юзера
     client = await tg_manager.get_client(session_name)
 
+    user_session = db.query(UserSession).filter(UserSession.phone == phone).first()
     try:
+        if user_session:
+            # сесія вже є → підключаємо клієнта
+            response = RedirectResponse(url="/ui/chats", status_code=303)
+            response.set_cookie(key="session_name", value=user_session.session_name, httponly=True)
+            return response
+            # якщо немає — йдемо по стандартному флоу
         if password:
             await client.check_password(password)
             response = RedirectResponse(url="/ui/chats", status_code=303)
             response.set_cookie(key="session_name", value=session_name, httponly=True)
+            user_session = UserSession(phone=phone, session_name=session_name)
+            db.add(user_session)
+            db.commit()
             return response
-
         elif code and phone_code_hash:
             try:
                 await client.sign_in(phone, phone_code_hash, code)
                 response = RedirectResponse(url="/ui/chats", status_code=303)
+                user_session = UserSession(phone=phone, session_name=session_name)
+                db.add(user_session)
+                db.commit()
                 response.set_cookie(key="session_name", value=session_name, httponly=True)
                 return response
             except SessionPasswordNeeded:
-                return templates.TemplateResponse("login.html", {
-                    "request": request,
-                    "need_password": True,
-                    "phone": phone
-                })
-
+                return templates.TemplateResponse("login.html",
+                                                  {"request": request, "need_password": True,
+                                                   "phone": phone})
         else:
             sent_code = await client.send_code(phone)
-            return templates.TemplateResponse("login.html", {
-                "request": request,
-                "sent": True,
-                "phone": phone,
-                "phone_code_hash": sent_code.phone_code_hash
-            })
 
+            return templates.TemplateResponse("login.html",
+                                              {"request": request, "sent": True, "phone": phone,
+                                               "phone_code_hash": sent_code.phone_code_hash})
     except Exception as e:
         return HTMLResponse(f"<h2>❌ Error: {e}</h2>")
 
@@ -68,8 +100,19 @@ async def login(
 @app.get("/logout")
 async def logout(request: Request):
     session_name = request.cookies.get("session_name")
+
     # зупиняємо клієнт у менеджері
     await tg_manager.stop_client(session_name)
+
+    # видаляємо з БД
+    db: Session = SessionLocal()
+    try:
+        user_session = db.query(UserSession).filter_by(session_name=session_name).first()
+        if user_session:
+            db.delete(user_session)
+            db.commit()
+    finally:
+        db.close()
 
     # видаляємо файл сесії
     session_file = f"{session_name}.session"
@@ -78,9 +121,8 @@ async def logout(request: Request):
             os.remove(session_file)
         except Exception as e:
             return {"status": f"error deleting session file: {e}"}
-        return {"status": "session deleted, please login again"}
-    else:
-        return {"status": "no active session"}
+
+    return {"status": "session deleted, please login again"}
 
 
 @app.get("/chats")
@@ -92,10 +134,12 @@ async def get_chats(request: Request):
         chat = dialog.chat
         title = chat.title if chat.type in [ChatType.GROUP, ChatType.SUPERGROUP, ChatType.CHANNEL] else \
             f"{chat.first_name or ''} {chat.last_name or ''}".strip() or "Private user"
+
         # аватарка
+
         photo_url = None
-        if chat.photo:
-            photo_url = await client.download_media(chat.photo.small_file_id)
+        # if chat.photo:
+        #     photo_url = await client.download_media(chat.photo.small_file_id)
 
         chats.append({
             "chat_id": chat.id,

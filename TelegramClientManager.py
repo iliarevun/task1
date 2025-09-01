@@ -1,6 +1,9 @@
 from pyrogram import Client
 from typing import Dict
 
+from pyrogram.errors import SessionPasswordNeeded
+
+
 class TelegramClientManager:
     def __init__(self, api_id: int, api_hash: str):
         self.api_id = api_id
@@ -9,8 +12,8 @@ class TelegramClientManager:
 
     async def get_client(self, session_name: str) -> Client:
         if session_name not in self._clients:
-            client = Client(session_name, self.api_id, self.api_hash)
-            await client.start()
+            client = Client(session_name, api_id=self.api_id, api_hash=self.api_hash)
+            await client.connect()  # ✅ тільки підключаємось, без start()
             self._clients[session_name] = client
 
         return self._clients[session_name]

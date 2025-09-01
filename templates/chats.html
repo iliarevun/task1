@@ -53,15 +53,16 @@
         a.href = `/ui/chats/${encodeURIComponent(c.chat_id)}`;
         const title = c.title || '(без назви)';
         a.innerHTML = `
-         <div style="display:flex;align-items:center;">
-        ${photo}
-        <div>
-          <div>
-            <div>${title}</div>
-            <div class="type">${c.type}</div>
-          </div>
-          <div class="right">›</div>
-        `;
+  <div style="display:flex;align-items:center;">
+    ${c.photo ? `<img src="${c.photo}" alt="photo" style="width:40px;height:40px;border-radius:50%;">` : ""}
+  </div>
+  <div>
+    <div>${title}</div>
+    <div class="type">${c.type}</div>
+  </div>
+  <div class="right">›</div>
+`;
+
         listEl.appendChild(a);
       });
     }
